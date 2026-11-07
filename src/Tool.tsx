@@ -67,7 +67,7 @@ export default function Tool() {
 
   const rows = useMemo(() => (source?.kind === 'sample' ? SAMPLES.find((s) => s.id === source.id)!.rows() : source?.kind === 'upload' ? source.rows : null), [source])
   const ds = useMemo(() => (rows ? buildDataset(rows) : null), [rows])
-  // analysis runs on the main thread, deferred so typing stays smooth. Move to a worker if real files exceed ~50k leaf-periods.
+  // Analysis runs on the main thread, deferred so typing stays smooth. Move to a worker if real files exceed ~50k leaf-periods.
   const opts = useDeferredValue<Options>(useMemo(() => ({ ...DEFAULTS, frozenDays: Math.max(1, frozenDays || 1), zThreshold: z, shareJumpPP: share }), [frozenDays, z, share]))
   const an = useMemo(() => (ds && ds.S >= 2 ? analyze(ds, opts) : null), [ds, opts])
 
