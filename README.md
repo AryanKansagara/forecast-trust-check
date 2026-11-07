@@ -2,7 +2,7 @@
 
 Upload successive forecast snapshots and see what moved, whether it was noise, and whether splitting totals down to item level distorted the plan.
 
-**Live:** LIVE_URL
+**Live:** https://forecast-trust-check.vercel.app
 
 ## The pain
 
