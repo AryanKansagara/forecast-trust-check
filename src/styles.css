@@ -392,3 +392,9 @@ th.mapped, td.mapped { background: color-mix(in oklab, var(--up) 9%, transparent
   .print-pack .chart-fluid { max-height: 200pt; }
   @page { margin: 14mm; }
 }
+.docs .wrap { max-width: 860px; }
+.docs h2 { font-size: 24px; margin: 40px 0 12px; }
+.docs p, .docs li { color: var(--body); line-height: 1.6; }
+.docs ul { padding-left: 20px; display: grid; gap: 8px; }
+.docs code { font-family: 'IBM Plex Mono', monospace; font-size: .9em; background: var(--line-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+.docs a, .footer a { color: var(--teal); overflow-wrap: anywhere; }

@@ -41,6 +41,7 @@ export default function Landing() {
           <a href="#audit">Split audit</a>
           <a href="#privacy">Privacy</a>
           <a href="#samples">Samples</a>
+          <Link href="/docs">Docs</Link>
         </nav>
         <div className="topbar-right">
           <ThemeToggle />
@@ -149,11 +150,11 @@ base-uri   'none'`}</code></pre>
       <section className="section" id="samples">
         <div className="wrap">
           <p className="eyebrow">Try it without your data</p>
-          <h2 className="section-title">Three synthetic datasets, one of them deliberately boring</h2>
+          <h2 className="section-title">Three synthetic datasets, one deliberately boring, and one real</h2>
           <div className="sample-grid">
             {SAMPLES.map((s) => (
               <Link key={s.id} href={`/app?sample=${s.id}`} className="sample-card">
-                <span className="tag-synth">Synthetic</span>
+                <span className="tag-synth">{s.real ? 'Public data' : 'Synthetic'}</span>
                 <h3>{s.name}</h3>
                 <p>{s.blurb}</p>
                 <p className="sample-plants">{s.plants}</p>
@@ -161,7 +162,7 @@ base-uri   'none'`}</code></pre>
               </Link>
             ))}
           </div>
-          <p className="section-sub share-note">All sample names and numbers are invented.</p>
+          <p className="section-sub share-note">The synthetic samples are invented. The fuel demand sample is real U.S. EIA forecast history (public domain), see the <Link href="/docs">docs</Link>.</p>
         </div>
       </section>
       <Footer />

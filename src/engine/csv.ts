@@ -122,8 +122,10 @@ export type DateOrder = 'mdy' | 'dmy'
 function isoWeek(y: number, w: number): string | null {
   if (w < 1 || w > 53) return null
   const jan4 = new Date(Date.UTC(y, 0, 4))
-  const monday = jan4.getTime() - ((jan4.getUTCDay() + 6) % 7) * 864e5
-  return new Date(monday + (w - 1) * 7 * 864e5).toISOString().slice(0, 10)
+  const monday = jan4.getTime() - ((jan4.getUTCDay() + 6) % 7) * 864e5 + (w - 1) * 7 * 864e5
+  // Only some years have a week 53: its Thursday must still fall in the same year.
+  if (new Date(monday + 3 * 864e5).getUTCFullYear() !== y) return null
+  return new Date(monday).toISOString().slice(0, 10)
 }
 
 // Everything normalises to an ISO day: a month bucket becomes its first day, a week bucket its Monday.
@@ -132,8 +134,11 @@ export function parseDate(raw: string, order: DateOrder = 'mdy'): string | null 
   if (!s) return null
   let m: RegExpMatchArray | null
   if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T ].*)?$/))) return iso(+m[1], +m[2], +m[3])
-  if ((m = s.match(/^(\d{4})-?W(\d{1,2})$/i))) return isoWeek(+m[1], +m[2])
-  if ((m = s.match(/^W(\d{1,2})[-\s/]+(\d{2,4})$/i))) return isoWeek(fullYear(+m[2]), +m[1])
+  // Compact SAP-style keys: 20260105 is a day, 202601 a month.
+  if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return iso(+m[1], +m[2], +m[3])
+  if ((m = s.match(/^(\d{4})(0[1-9]|1[0-2])$/))) return iso(+m[1], +m[2], 1)
+  if ((m = s.match(/^(\d{4})[-\s/.]?[CK]?W(\d{1,2})$/i))) return isoWeek(+m[1], +m[2])
+  if ((m = s.match(/^[CK]?W\s?(\d{1,2})[-\s/.]+(\d{2,4})$/i))) return isoWeek(fullYear(+m[2]), +m[1])
   if ((m = s.match(/^(\d{4})[-/](\d{1,2})$/))) return iso(+m[1], +m[2], 1)
   if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:[T ].*)?$/))) {
     const a = +m[1], b = +m[2], y = fullYear(+m[3])
@@ -247,6 +252,8 @@ export interface ImportReport { total: number; kept: number; bad: BadRow[]; reas
 export function emptyReport(): ImportReport { return { total: 0, kept: 0, bad: [], reasons: {}, duplicates: 0, parentRows: 0, actualsRows: 0 } }
 
 const TOTAL_ITEM = /^(total|all|grand total|\*)$/i
+// "Sales forecast" is a forecast, so a forecast or plan word wins over sales or actual.
+const ACTUAL_MEASURE = /^(?!.*(forecast|fcst|plan|projection)).*(actual|sales|shipment|history)/i
 
 export function buildRows(csv: ParsedCsv, map: Mapping, file: string, report: ImportReport): CleanRow[] {
   const out: CleanRow[] = []
@@ -256,14 +263,20 @@ export function buildRows(csv: ParsedCsv, map: Mapping, file: string, report: Im
   }
   const col = (r: string[], i: number) => (i > -1 ? (r[i] ?? '').trim() : '')
   const fixed = parseDate(map.fixedSnapshot, map.dateOrder)
+  // Planning exports often carry several forecast key figures (statistical, consensus, final). Summing them would
+  // double count, so keep one, preferring the consensus or final plan, and report the rest as skipped.
+  const measures = new Set<string>()
+  if (map.measure > -1) for (const r of csv.rows) { const v = col(r, map.measure); if (v && !ACTUAL_MEASURE.test(v)) measures.add(v) }
+  const keepMeasure = measures.size > 1 ? [...measures].find((v) => /consensus|final|approved/i.test(v)) ?? [...measures].find((v) => /demand plan|forecast/i.test(v) && !/stat/i.test(v)) ?? [...measures][0] : null
   const periodHeaders = map.format === 'wide'
     ? map.periodCols.map((c) => ({ c, day: parseDate(csv.headers[c], map.dateOrder) }))
     : []
   csv.rows.forEach((r, i) => {
     report.total++
     if (r.length !== csv.headers.length && r.length < 2) return bad(i, 'Row has too few columns')
-    const measure = col(r, map.measure).toLowerCase()
-    const isActualMeasure = /actual|sales|shipment|history/.test(measure)
+    const measureRaw = col(r, map.measure)
+    const isActualMeasure = ACTUAL_MEASURE.test(measureRaw)
+    if (keepMeasure && !isActualMeasure && measureRaw !== keepMeasure) return bad(i, `Other measure skipped (kept "${keepMeasure}")`)
     const snapRaw = col(r, map.snapshot)
     let snapshot: string | null = map.snapshot > -1 ? parseDate(snapRaw, map.dateOrder) : fixed
     const rawItem = col(r, map.item)

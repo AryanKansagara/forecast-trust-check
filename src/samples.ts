@@ -1,7 +1,8 @@
-// Three SYNTHETIC datasets. Every name and number is invented; the defects are planted on purpose so the engine has something to find.
+// Three SYNTHETIC datasets (every name and number invented, defects planted on purpose) and one real public dataset.
 import type { CleanRow } from './engine/csv.ts'
+import { STEO_ACTUALS, STEO_NAMES, STEO_TOTAL, STEO_VINTAGES } from './steoData.ts'
 
-export interface Sample { id: string; name: string; blurb: string; plants: string; rows: () => CleanRow[] }
+export interface Sample { id: string; name: string; blurb: string; plants: string; rows: () => CleanRow[]; real?: boolean }
 
 function rng(seed: number) {
   let a = seed >>> 0
@@ -150,10 +151,32 @@ function control(): CleanRow[] {
   return rows
 }
 
+const addMonths = (ym: string, k: number) => {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 10)
+}
+
+// Real forecast vintages: each EIA release is a snapshot, the products are items and the stated U.S. total is the parent.
+function eiaFuels(): CleanRow[] {
+  const rows: CleanRow[] = []
+  const base = { family: 'U.S. petroleum products', region: '', customer: '' }
+  for (const vin of STEO_VINTAGES) {
+    for (const [code, vals] of Object.entries(vin.v)) {
+      const item = code === STEO_TOTAL ? '' : STEO_NAMES[code]
+      vals.forEach((qty, h) => rows.push({ ...base, snapshot: vin.date, item, period: addMonths(vin.start, h), qty, actual: null }))
+    }
+  }
+  for (const [code, vals] of Object.entries(STEO_ACTUALS.v)) {
+    vals.forEach((actual, h) => rows.push({ ...base, snapshot: null, item: STEO_NAMES[code], period: addMonths(STEO_ACTUALS.start, h), qty: null, actual }))
+  }
+  return rows
+}
+
 export const SAMPLES: Sample[] = [
   { id: 'cpg', name: 'Consumer goods', blurb: 'Monthly top-down plan, 6 family and region splits, 14 snapshots, actuals.', plants: 'A bad disaggregation: shares that jump, totals that do not add up, delisted items still fed.', rows: consumerGoods },
   { id: 'electronics', name: 'Electronics', blurb: 'Weekly build plan, 18 items, 16 snapshots, actuals, no stated totals.', plants: 'A nervous near-term window: the next 5 weeks flip-flop while the far horizon is calm.', rows: electronics },
   { id: 'control', name: 'Clean control', blurb: 'Monthly plan, 10 items, 12 snapshots, actuals, totals that reconcile.', plants: 'Nothing planted. A trust check should say so, and it does.', rows: control },
+  { id: 'eia-fuels', name: 'U.S. fuel demand (real)', real: true, blurb: 'Real public data: 12 monthly EIA Short-Term Energy Outlook releases, 7 products in thousand barrels per day, stated U.S. total, actuals.', plants: 'Nothing planted. Source: U.S. EIA STEO Table 4a, Nov 2025 to Oct 2026, public domain.', rows: eiaFuels },
 ]
 
 export function sampleCsv(rows: CleanRow[]): string {

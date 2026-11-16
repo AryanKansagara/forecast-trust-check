@@ -306,3 +306,96 @@ test('export: labels cannot execute as spreadsheet formulas, and commas stay quo
   assert.ok(csv.startsWith('rank,severity,type'))
   assert.ok(csv.split('\r\n').length > 5)
 })
+
+test('dates: week 53 only exists in long ISO years, and CW/KW week labels read', () => {
+  assert.equal(parseDate('2026-W53'), '2026-12-28') // 2026 starts on a Thursday, so it has 53 weeks
+  assert.equal(parseDate('2020-W53'), '2020-12-28')
+  assert.equal(parseDate('2025-W53'), null) // would silently become week 1 of 2026
+  assert.equal(parseDate('W53 2025'), null)
+  assert.equal(parseDate('CW05 2026'), '2026-01-26')
+  assert.equal(parseDate('KW 05/2026'), '2026-01-26')
+})
+
+test('dates: compact SAP-style YYYYMM and YYYYMMDD keys', () => {
+  assert.equal(parseDate('202601'), '2026-01-01')
+  assert.equal(parseDate('20260105'), '2026-01-05')
+  assert.equal(parseDate('202613'), null)
+  assert.equal(parseDate('20260230'), null)
+})
+
+// Written to match the layout of an SAP IBP Excel add-in planning view saved as CSV: attribute columns, a Key Figure
+// column, then one column per bucket. Several forecast key figures sit side by side and must not be summed.
+const IBP_VIEW = [
+  'Product ID,Location ID,Key Figure,JAN 2026,FEB 2026,MAR 2026,APR 2026',
+  'FG-1001,DC-EAST,Statistical Forecast Qty,"1,180","1,210","1,240","1,255"',
+  'FG-1001,DC-EAST,Consensus Demand,"1,200","1,250","1,300","1,300"',
+  'FG-1001,DC-EAST,Actuals Qty,"1,165",,,',
+  'FG-1002,DC-EAST,Statistical Forecast Qty,410,395,420,430',
+  'FG-1002,DC-EAST,Consensus Demand,400,400,400,400',
+  'FG-1002,DC-EAST,Actuals Qty,388,,,',
+].join('\r\n')
+
+test('import: an IBP-style view keeps the consensus key figure and reads actuals, without double counting', () => {
+  const csv = parseCsv(IBP_VIEW)
+  const map = guessMapping(csv, 'ibp_consensus_2026-01-12.csv')
+  assert.equal(map.format, 'wide')
+  assert.equal(csv.headers[map.measure], 'Key Figure')
+  assert.equal(csv.headers[map.item], 'Product ID')
+  assert.equal(csv.headers[map.region], 'Location ID')
+  const report = emptyReport()
+  const rows = buildRows(csv, map, 'ibp_consensus_2026-01-12.csv', report)
+  const fc = rows.filter((r) => r.qty !== null)
+  assert.deepEqual(fc.filter((r) => r.item === 'FG-1001').map((r) => r.qty), [1200, 1250, 1300, 1300])
+  assert.equal(fc.length, 8)
+  assert.deepEqual(rows.filter((r) => r.actual !== null).map((r) => [r.item, r.period, r.actual]), [['FG-1001', '2026-01-01', 1165], ['FG-1002', '2026-01-01', 388]])
+  assert.equal(report.reasons['Other measure skipped (kept "Consensus Demand")'], 2)
+  assert.equal(report.duplicates, 0)
+})
+
+test('import: a "Sales Forecast" measure is a forecast, not actuals', () => {
+  const csv = parseCsv('snapshot,item,period,measure,qty\n2026-01-05,A,2026-02,Sales Forecast,100\n2026-01-05,A,2026-01,Sales,90\n')
+  const report = emptyReport()
+  const rows = buildRows(csv, guessMapping(csv), 'f.csv', report)
+  assert.deepEqual(rows.map((r) => [r.qty, r.actual]), [[100, null], [null, 90]])
+})
+
+test('accuracy: value add against naive, worked by hand', () => {
+  // Actuals Jan 100, Feb 120. Snapshot on Feb 1 forecasts Feb at 110; the naive forecast repeats Jan's 100.
+  const ds = buildDataset([row(null, 'A', '2026-01-01', null, { actual: 100 }), row(null, 'A', '2026-02-01', null, { actual: 120 }), row('2026-02-01', 'A', '2026-02-01', 110), row('2026-02-01', 'A', '2026-03-01', 50)])
+  const a = computeAccuracy(ds, leafIdx(ds, 'A'))
+  assert.equal(a.wapeFinal, 10 / 120)
+  assert.equal(a.wapeNaive, 20 / 120)
+  assert.equal(a.fvaVsNaive, 10 / 120)
+  assert.equal(a.byLag[0].lag, 0)
+})
+
+test('real data: EIA STEO vintages load as snapshots, and the stated U.S. total reconciles with its products', () => {
+  const s = SAMPLES.find((x) => x.id === 'eia-fuels')!
+  assert.ok(s.real)
+  const ds = buildDataset(s.rows())
+  assert.equal(ds.S, 12)
+  assert.equal(ds.snapshots[0], '2025-11-06')
+  assert.equal(ds.snapshots[11], '2026-10-01')
+  assert.equal(ds.L, 7)
+  // Motor gasoline for Dec 2026 as published: 8,713.0 kb/d in the January 2026 release, 8,724.6 in February.
+  const mg = ds.nodes[leafIdx(ds, 'Motor gasoline')].leaf
+  const dec = ds.periods.indexOf('2026-12-01')
+  assert.equal(ds.q[(mg * ds.S + 2) * ds.P + dec], 8713)
+  assert.equal(ds.q[(mg * ds.S + 3) * ds.P + dec], 8724.6)
+  const an = analyze(ds)
+  // EIA publishes components rounded to 0.1 kb/d, so the total can differ from their sum by rounding only.
+  assert.equal(an.audit.findings.filter((f) => f.type === 'sum_mismatch').length, 0)
+  assert.ok(an.summary.accuracy && an.summary.accuracy.byLag[0].wape < an.summary.accuracy.byLag[0].naiveWape)
+  // Sanity: a published national outlook should not read as a nervous plan.
+  assert.equal(an.summary.bands.nervous, 0)
+})
+
+test('real data: the EIA sample round-trips through its own CSV download', () => {
+  const s = SAMPLES.find((x) => x.id === 'eia-fuels')!
+  const csv = parseCsv(sampleCsv(s.rows()))
+  const report = emptyReport()
+  const rows = buildRows(csv, guessMapping(csv), 'eia-fuels.csv', report)
+  assert.equal(report.bad.length, 0)
+  assert.equal(rows.length, s.rows().length)
+  assert.ok(report.parentRows > 0)
+})

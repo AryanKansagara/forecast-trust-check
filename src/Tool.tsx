@@ -96,7 +96,8 @@ export default function Tool() {
   const openSample = (id: string) => { setSource({ kind: 'sample', id }); setSel(null); setMapping(null); history.replaceState({}, '', `/app?sample=${id}`) }
 
   const name = source?.kind === 'sample' ? `${SAMPLES.find((s) => s.id === source.id)!.name}` : source?.kind === 'upload' ? source.name : ''
-  const synthetic = source?.kind === 'sample'
+  const synthetic = source?.kind === 'sample' && !SAMPLES.find((x) => x.id === source.id)?.real
+  const realSample = source?.kind === 'sample' && !synthetic
 
   return (
     <div className="tool">
@@ -107,10 +108,11 @@ export default function Tool() {
             <div className="data-pill">
               <b>{name}</b>
               {synthetic && <span className="tag-synth">Synthetic sample</span>}
+              {realSample && <span className="tag-synth">Public EIA data</span>}
             </div>
           )}
           <div className="topbar-right">
-            {source && <button type="button" className="btn ghost" onClick={forget}>{synthetic ? 'Change data' : 'Forget this data'}</button>}
+            {source && <button type="button" className="btn ghost" onClick={forget}>{source.kind === 'sample' ? 'Change data' : 'Forget this data'}</button>}
             <ThemeToggle />
           </div>
         </header>
@@ -140,17 +142,17 @@ function Start({ onFiles, err, onSample }: { onFiles: (f: File[]) => void; err: 
       </div>
       <Dropzone onFiles={onFiles} error={err} />
       <div className="start-samples">
-        <h2>Or open a synthetic sample</h2>
+        <h2>Or open a sample</h2>
         <div className="sample-grid">
           {SAMPLES.map((s) => (
             <div key={s.id} className="sample-card">
-              <span className="tag-synth">Synthetic</span>
+              <span className="tag-synth">{s.real ? 'Public data' : 'Synthetic'}</span>
               <h3>{s.name}</h3>
               <p>{s.blurb}</p>
               <p className="sample-plants">{s.plants}</p>
               <div className="sample-actions">
                 <button type="button" className="btn primary small" onClick={() => onSample(s.id)}>Open</button>
-                <button type="button" className="btn ghost small" onClick={() => download(`${s.id}-synthetic.csv`, sampleCsv(s.rows()))}>Get the CSV</button>
+                <button type="button" className="btn ghost small" onClick={() => download(`${s.id}${s.real ? '' : '-synthetic'}.csv`, sampleCsv(s.rows()))}>Get the CSV</button>
               </div>
             </div>
           ))}
@@ -467,7 +469,7 @@ function TopRevisers({ ds, an, onOpen }: { ds: Dataset; an: Analysis; onOpen: (n
 
 function ReportView({ source, ds }: { source: NonNullable<Source>; ds: Dataset }) {
   const facts = `${ds.S} snapshots from ${fmtDay(ds.snapshots[0])} to ${fmtDay(ds.snapshots[ds.S - 1])}, ${ds.L} items, ${ds.P} periods, bucket size about ${ds.gapDays} days. Hierarchy: ${ds.levels.join(' > ') || 'none'}. Stated parent totals: ${ds.stated.size}. Actuals: ${ds.hasActuals ? 'yes' : 'no'}.`
-  if (source.kind === 'sample') return <><h3 className="view-title">Import report</h3><p>{facts}</p><p className="muted">This is a built-in synthetic sample, so nothing was rejected. Use Get the CSV on the start page to try the importer.</p></>
+  if (source.kind === 'sample') return <><h3 className="view-title">Import report</h3><p>{facts}</p><p className="muted">This is a built-in sample, so nothing was rejected. Use Get the CSV on the start page to try the importer.</p></>
   const r = source.report
   return (
     <>
