@@ -14,7 +14,7 @@ Forecasts are commercially sensitive, so there is no server. The built page ship
 
 ## Features
 
-- **Import:** tolerant CSV with a column mapping step. Long or wide, many files or one, comma, semicolon, tab or pipe, decimal commas, month and ISO week buckets. Every rejected row is reported with its line and reason.
+- **Import:** tolerant CSV with a column mapping step. Long or wide, many files or one, comma, semicolon, tab or pipe, decimal commas, month and ISO week buckets (including `CW05 2026`, `KW 05/2026`, SAP-style `202601` and `20260105`). Files with several forecast key figures, such as an SAP IBP planning view, keep the consensus or final one instead of summing them. Every rejected row is reported with its line and reason.
 - **Stability:** revision WAPE, COV (change over versions), frozen-window churn, bias drift, flip-flops with units undone, and a 0-100 nervousness score, per item and hierarchy node.
 - **Accuracy:** error by lag, value add against naive, and whether revisions actually helped.
 - **Noise vs signal:** each revision is tested against the item's own history, shrunk toward the portfolio when history is short.
@@ -23,7 +23,7 @@ Forecasts are commercially sensitive, so there is no server. The built page ship
 - **Views:** waterfall heatmap, hierarchy treemap, sparklines, revision fan, parent-to-children sankey, item drawer.
 - **Export:** findings and items CSV, plus a print-ready review pack for the demand review.
 
-Three synthetic samples are included: consumer goods with a bad split, electronics with a nervous near term, and a clean control that should stay quiet. All their names and numbers are invented.
+Four samples are included. Three are synthetic, with every name and number invented: consumer goods with a bad split, electronics with a nervous near term, and a clean control that should stay quiet. The fourth is real public data: U.S. petroleum product consumption forecasts from twelve monthly releases (Nov 2025 to Oct 2026) of the U.S. EIA Short-Term Energy Outlook, Table 4a, from https://www.eia.gov/outlooks/steo/archives/ (public domain). Definitions and data sources are on `/docs`.
 
 ## Parent totals
 
