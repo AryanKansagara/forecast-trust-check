@@ -38,4 +38,4 @@ npm test
 npm run build
 ```
 
-Built by Aryan Kansagara. Independent project, not affiliated with Kinaxis.
+Built by Aryan Kansagara.

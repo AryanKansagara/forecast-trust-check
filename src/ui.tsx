@@ -50,7 +50,7 @@ export const Lock = ({ size = 14 }: { size?: number }) => (
 export function Footer() {
   return (
     <footer className="footer">
-      <span>Built by Aryan Kansagara. Independent project, not affiliated with Kinaxis. <Link href="/docs">Docs</Link></span>
+      <span>Built by Aryan Kansagara. <Link href="/docs">Docs</Link></span>
       <span className="footer-lock"><Lock size={12} /> Runs entirely in your browser. Samples are synthetic or public data.</span>
     </footer>
   )
