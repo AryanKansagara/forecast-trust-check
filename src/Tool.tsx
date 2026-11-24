@@ -10,6 +10,7 @@ import { Drawer } from './Drawer.tsx'
 import { Dropzone, MappingStep, readFiles, type FileIn, type Imported } from './Import.tsx'
 import { PrintPack } from './PrintPack.tsx'
 import { sampleCsv, SAMPLES } from './samples.ts'
+import { parseSettings, parseUpload } from './saved.ts'
 import { decodeState, encodeState } from './share.ts'
 import { Brand, download, Footer, Lock, ThemeToggle } from './ui.tsx'
 
@@ -20,17 +21,19 @@ interface Saved { sample: string | null; frozenDays: number; z: number; share: n
 
 const KEY = 'ftc.settings', DATA_KEY = 'ftc.upload'
 
+const TAB_IDS = TABS.map(([id]) => id)
 function loadSaved(): Partial<Saved> {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') } catch { return {} }
+  try { return parseSettings(localStorage.getItem(KEY), TAB_IDS) as Partial<Saved> } catch { return {} }
 }
 function initialSource(saved: Partial<Saved>): Source {
   const q = new URLSearchParams(location.search).get('sample')
   if (q && SAMPLES.some((s) => s.id === q)) return { kind: 'sample', id: q }
+  // Saved values come from an earlier visit and may be stale or damaged, so each one is checked before it is trusted.
   try {
-    const up = JSON.parse(localStorage.getItem(DATA_KEY) ?? 'null')
-    if (up?.rows) return { kind: 'upload', name: up.name, rows: up.rows, report: up.report }
-  } catch { /* corrupt saved data is simply ignored */ }
-  return saved.sample ? { kind: 'sample', id: saved.sample } : null
+    const up = parseUpload(localStorage.getItem(DATA_KEY))
+    if (up) return { kind: 'upload', name: up.name, rows: up.rows, report: up.report }
+  } catch { /* storage that cannot be read is simply ignored */ }
+  return saved.sample && SAMPLES.some((s) => s.id === saved.sample) ? { kind: 'sample', id: saved.sample } : null
 }
 
 export default function Tool() {
