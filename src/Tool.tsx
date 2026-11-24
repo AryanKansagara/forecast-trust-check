@@ -193,13 +193,18 @@ function Workspace(w: WS) {
       if (/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); step(1) }
       else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); step(-1) }
-      else if (e.key === 'Enter' && t.tagName !== 'BUTTON' && t.tagName !== 'A' && current) setDrawer(current.node)
+      else if (e.key === 'Enter' && t.tagName !== 'BUTTON' && t.tagName !== 'A' && current) {
+        // The drawer puts focus on its Close button, and the browser then delivers this same keystroke's keypress to
+        // the button, which clicks it. Cancelling the keydown stops that, so Enter opens the drawer and leaves it open.
+        e.preventDefault()
+        if (!e.repeat) setDrawer(current.node)
+      } else if (e.key === 'Enter' && e.repeat && drawer !== null && t.classList.contains('drawer-close')) e.preventDefault() // still holding Enter from opening
       else if (e.key === '?') setHelp((h) => !h)
       else if (/^[1-6]$/.test(e.key)) setTab(TABS[+e.key - 1][0])
     }
     addEventListener('keydown', on)
     return () => removeEventListener('keydown', on)
-  }, [step, current, setTab])
+  }, [step, current, setTab, drawer])
 
   useEffect(() => {
     // Scroll the list only; scrollIntoView would also move the page and hide the header on small screens.

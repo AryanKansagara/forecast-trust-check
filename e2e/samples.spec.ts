@@ -87,14 +87,74 @@ test.describe('samples', () => {
     await expect(page.getByRole('dialog', { name: 'Detail for BEV-COLA-330' })).toBeVisible()
   })
 
-  // KNOWN BUG, issue #2: Enter opens the drawer and the same keystroke then clicks its freshly focused Close button.
-  // test.fail() keeps this honest: when the app is fixed this starts passing, CI turns red, and the marker should go.
-  test('Enter opens the detail for the selected finding', async ({ page }) => {
-    test.fail(true, 'Issue #2: Enter opens the drawer and closes it again in the same keystroke')
+  // Counts how many times the detail drawer closes, so "opened and closed again in the same keystroke" cannot slip by.
+  const countCloses = (page: import('@playwright/test').Page) => page.evaluate(() => {
+    const w = window as unknown as { __closes: number }
+    w.__closes = 0
+    document.querySelector('dialog.drawer')!.addEventListener('close', () => { w.__closes++ })
+  })
+  const closes = (page: import('@playwright/test').Page) => page.evaluate(() => (window as unknown as { __closes: number }).__closes)
+
+  test('Enter opens the detail for the selected finding and leaves it open', async ({ page }) => {
     await openSample(page, 'cpg')
+    await countCloses(page)
     await page.locator('.rank-row').first().click()
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible({ timeout: 1500 })
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible()
+    expect(await closes(page)).toBe(0)
+    await expect(page.locator('.drawer-close')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect.poll(() => closes(page)).toBe(1)
+  })
+
+  test('Enter opens the second finding after clicking it, as the README promises', async ({ page }) => {
+    await openSample(page, 'cpg')
+    await countCloses(page)
+    await page.locator('.rank-row').nth(1).click()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-COLA-330' })).toBeVisible()
+    expect(await closes(page)).toBe(0)
+  })
+
+  test('Enter opens the detail after moving with j, and j and k then step through it', async ({ page }) => {
+    await openSample(page, 'cpg')
+    await countCloses(page)
+    await page.keyboard.press('j')
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-COLA-330' })).toBeVisible()
+    await page.keyboard.press('k')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible()
+    expect(await closes(page)).toBe(0)
+  })
+
+  test('holding Enter does not close the detail it just opened', async ({ page }) => {
+    await openSample(page, 'cpg')
+    await countCloses(page)
+    await page.locator('.rank-row').first().click()
+    await page.keyboard.down('Enter')
+    await page.keyboard.down('Enter')   // a key that is already down repeats
+    await page.keyboard.down('Enter')
+    await page.keyboard.up('Enter')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible()
+    expect(await closes(page)).toBe(0)
+  })
+
+  test('Enter still works on buttons: Open detail opens, Close closes', async ({ page }) => {
+    await openSample(page, 'cpg')
+    await countCloses(page)
+    await page.locator('.rank-row').first().getByRole('button', { name: 'Open detail' }).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible()
+    expect(await closes(page)).toBe(0)
+    await page.keyboard.press('Enter')   // focus is on Close
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect.poll(() => closes(page)).toBe(1)
+    // Enter on the findings list opens it again afterwards, once, and it stays.
+    await page.locator('.rank-row').first().click()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog', { name: 'Detail for BEV-LEMON-330' })).toBeVisible()
+    await expect.poll(() => closes(page)).toBe(1)
   })
 
   test('a sample CSV imports back to the same answers', async ({ page }) => {
