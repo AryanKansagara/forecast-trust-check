@@ -247,7 +247,8 @@ export interface CleanRow {
   actual: number | null
 }
 export interface BadRow { file: string; line: number; reason: string; raw: string }
-export interface ImportReport { total: number; kept: number; bad: BadRow[]; reasons: Record<string, number>; duplicates: number; parentRows: number; actualsRows: number }
+// skipped: files that were dropped but could not be read at all, each with the reason. Absent in reports saved earlier.
+export interface ImportReport { total: number; kept: number; bad: BadRow[]; reasons: Record<string, number>; duplicates: number; parentRows: number; actualsRows: number; skipped?: string[] }
 
 export function emptyReport(): ImportReport { return { total: 0, kept: 0, bad: [], reasons: {}, duplicates: 0, parentRows: 0, actualsRows: 0 } }
 

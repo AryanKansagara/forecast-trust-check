@@ -1,4 +1,4 @@
-import { chooseFiles, csvFile, expect, importCsv, openApp, stat, test } from './helpers.ts'
+import { chooseFiles, csvFile, expect, importCsv, openApp, openTab, runCheck, stat, test } from './helpers.ts'
 import { longCsv, wideCsv } from './fixtures.ts'
 
 // After any of these the app must say what is wrong and must not offer a score. A score would be a stable-looking
@@ -42,13 +42,48 @@ test.describe('files that are wrong, empty or cut short', () => {
     await expect(stat(page, 'rows read')).toHaveText('18')
   })
 
-  // KNOWN BUG, issue #4: the skipped file is never mentioned. test.fail() turns red once the app says so.
-  test('a file skipped next to a good one is named somewhere', async ({ page }) => {
-    test.fail(true, 'Issue #4: unreadable files dropped with readable ones are skipped silently')
-    await openApp(page)
-    await chooseFiles(page, csvFile('empty.csv', ''), csvFile('good.csv', longCsv()))
+  test('a file skipped next to a good one is named in the mapping step and the import report', async ({ page }) => {
+    await importCsv(page, csvFile('empty.csv', ''), csvFile('good.csv', longCsv()))
+    const skipped = page.locator('.skipped-files')
+    await expect(skipped).toContainText('1 file was left out')
+    await expect(skipped).toContainText('empty.csv has no data rows.')
+    await expect(skipped).not.toContainText('good.csv')
+    await expect(stat(page, 'rows read')).toHaveText('18')
+    await runCheck(page)
+    await openTab(page, /Import report/)
+    await expect(page.locator('.skipped-files')).toContainText('empty.csv has no data rows.')
+    await expect(page.getByText('Every row in the files that were used was read cleanly.')).toBeVisible()
+  })
+
+  test('every skipped file is listed with its own reason, whatever the order', async ({ page }) => {
+    await importCsv(page, csvFile('plan.xlsx', Buffer.from('PK\u0003\u0004')), csvFile('good.csv', longCsv()), csvFile('header.csv', 'snapshot_date,family,item,period,forecast_qty\n'), csvFile('blank.csv', '\n\n'))
+    const skipped = page.locator('.skipped-files')
+    await expect(skipped).toContainText('3 files were left out')
+    await expect(skipped.locator('li')).toHaveText([
+      'plan.xlsx is an Excel workbook. Use Save As > CSV in Excel, then drop the CSV here.',
+      'header.csv has no data rows.',
+      'blank.csv has no data rows.',
+    ])
+    await expect(page.getByRole('tab', { name: 'good.csv' })).toHaveCount(0)   // one readable file, so no file tabs
+  })
+
+  test('files that all read leave no skipped notice', async ({ page }) => {
+    await importCsv(page, csvFile('a.csv', longCsv()), csvFile('b.csv', longCsv()))
+    await expect(page.locator('.skipped-files')).toHaveCount(0)
+    await runCheck(page)
+    await openTab(page, /Import report/)
+    await expect(page.locator('.skipped-files')).toHaveCount(0)
+    await expect(page.getByText('Every row was read cleanly.')).toBeVisible()
+  })
+
+  test('going back from the mapping step keeps telling the user which files were skipped', async ({ page }) => {
+    await importCsv(page, csvFile('empty.csv', ''), csvFile('good.csv', longCsv()))
+    await page.getByRole('button', { name: 'Back' }).click()
+    await expect(startPage(page)).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveText('empty.csv has no data rows.')
+    await chooseFiles(page, csvFile('good.csv', longCsv()))
     await expect(page.getByRole('heading', { name: 'Check the column mapping' })).toBeVisible()
-    await expect(page.getByText('empty.csv', { exact: false }).first()).toBeVisible({ timeout: 1500 })
+    await expect(page.locator('.skipped-files')).toHaveCount(0)
   })
 
   test('a CSV about something else cannot be run', async ({ page }) => {
