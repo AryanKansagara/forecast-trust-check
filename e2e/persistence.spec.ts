@@ -84,12 +84,49 @@ test.describe('what survives a reload', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Bring two or more forecast snapshots' })).toBeVisible()
   })
 
-  // KNOWN BUG, issue #5: JSON of the wrong shape blanks the page. test.fail() turns red once it is handled.
+  const startHeading = (page: import('@playwright/test').Page) => page.getByRole('heading', { level: 1, name: 'Bring two or more forecast snapshots' })
+
   test('a saved sample id that no longer exists is ignored', async ({ page }) => {
-    test.fail(true, 'Issue #5: an unknown saved sample id blanks the page')
     await page.addInitScript(() => localStorage.setItem('ftc.settings', '{"sample":"nope"}'))
     await page.goto('/app')
-    await expect(page.getByRole('heading', { level: 1, name: 'Bring two or more forecast snapshots' })).toBeVisible({ timeout: 1500 })
+    await expect(startHeading(page)).toBeVisible()
+    await page.reload()
+    await expect(startHeading(page)).toBeVisible()
+  })
+
+  // Every one of these parses as JSON but is not what the page wrote. Each used to blank the page on every reload.
+  const WRONG_SHAPE: [string, string, string][] = [
+    ['settings that are null', 'ftc.settings', 'null'],
+    ['settings that are a number', 'ftc.settings', '5'],
+    ['settings that are a list', 'ftc.settings', '[1,2]'],
+    ['an unknown saved sample', 'ftc.settings', '{"sample":"nope"}'],
+    ['a saved sample that is not text', 'ftc.settings', '{"sample":{"id":"cpg"}}'],
+    ['settings of the wrong types', 'ftc.settings', '{"frozenDays":"soon","z":null,"share":[],"tab":"nope"}'],
+    ['an upload whose rows are a number', 'ftc.upload', '{"rows":5}'],
+    ['an upload that is null', 'ftc.upload', 'null'],
+    ['an upload with rows that are not rows', 'ftc.upload', '{"name":"x","rows":[1,2,3],"report":{}}'],
+    ['an upload with no report', 'ftc.upload', '{"name":"x","rows":[]}'],
+    ['an upload with a report that is not one', 'ftc.upload', '{"name":"x","rows":[{"snapshot":"2026-01-05","item":"A","family":"","region":"","customer":"","period":"2026-03-01","qty":1,"actual":null}],"report":5}'],
+  ]
+  for (const [label, key, value] of WRONG_SHAPE) {
+    test(`${label}: the start page opens, also after a reload`, async ({ page }) => {
+      await page.addInitScript(([k, v]) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(k, v); sessionStorage.setItem('seeded', '1') } }, [key, value])
+      await page.goto('/app')
+      await expect(startHeading(page)).toBeVisible()
+      await page.reload()
+      await expect(startHeading(page)).toBeVisible()
+      await page.locator('.sample-card').filter({ hasText: 'Clean control' }).getByRole('button', { name: 'Open' }).click()
+      await expect(workspace(page)).toBeVisible()
+    })
+  }
+
+  test('one bad saved setting does not throw away the others', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('ftc.settings', '{"sample":"control","frozenDays":14,"z":"high","tab":"items"}'))
+    await page.goto('/app')
+    await expect(page.locator('.data-pill b')).toHaveText('Clean control')
+    await expect(frozen(page)).toHaveValue('14')
+    await expect(page.getByRole('tab', { name: /Items/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByLabel('Signal at')).toHaveValue('2.5')
   })
 
   test('a settings link restores the view and sample, and holds no uploaded data', async ({ page }) => {

@@ -23,6 +23,7 @@ export default function Docs() {
             <li>Numbers: <code>1,234.5</code>, <code>1.234,5</code>, <code>(120)</code>, and a decimal-comma switch for semicolon files.</li>
             <li>Actuals: an actuals column, or a measure / key figure column whose value says actual, sales, shipments or history. "Sales forecast" counts as a forecast.</li>
             <li>Several forecast key figures in one file (for example statistical, consensus and final, as in an SAP IBP planning view) are not summed. The consensus or final one is kept and the rest are listed in the import report.</li>
+            <li>Wide files: a blank cell is no forecast for that period, never zero. A row that stops before the last period column is still read, with the missing periods left blank, but it is listed in the import report because the file may be cut off.</li>
             <li>Parent totals: a row with a blank item, or an item called <code>TOTAL</code> or <code>ALL</code>, is the stated total of its family / region / customer path.</li>
           </ul>
 
