@@ -38,4 +38,21 @@ npm test
 npm run build
 ```
 
+## Tests
+
+`npm test` runs the engine unit tests. `npm run test:e2e` runs the browser suite in `e2e/` with Playwright (Chromium). It drives the production build through `vite preview`, because only the built page carries the Content Security Policy, so build first:
+
+```
+npm ci
+npm run build
+npx playwright install chromium     # once; add --with-deps on a fresh Linux machine
+npm run test:e2e
+```
+
+The preview server listens on `127.0.0.1:4173`. Set `E2E_PORT` to use another port, for example `E2E_PORT=4300 npm run test:e2e`, and `E2E_DIST` to test a build written somewhere other than `dist`. Every test runs signed out; requests to any other origin are blocked and recorded, and a test fails if one is attempted or if the page throws.
+
+Tests marked `test.fail` document a known bug in an open issue. They pass while the bug exists and turn red when it is fixed, which is the cue to delete the marker.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same steps on every pull request and every push to `main` in a job named `test`: `npm ci`, build, unit tests, a typecheck of the e2e files and the browser suite. Vercel deploys `main` only (`vercel.json`), so pull request branches get no preview deployment.
+
 Built by Aryan Kansagara.
