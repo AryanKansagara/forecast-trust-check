@@ -50,7 +50,8 @@ export function Dropzone({ onFiles, error }: { onFiles: (f: File[]) => void; err
   )
 }
 
-export async function readFiles(files: File[]): Promise<{ loaded: FileIn[]; error: string }> {
+// error is every skipped file's message in one line, for the start page. skipped has them one by one, for the mapping step.
+export async function readFiles(files: File[]): Promise<{ loaded: FileIn[]; error: string; skipped: string[] }> {
   const loaded: FileIn[] = []
   const errors: string[] = []
   for (const f of files) {
@@ -59,18 +60,19 @@ export async function readFiles(files: File[]): Promise<{ loaded: FileIn[]; erro
     if (!csv.rows.length) { errors.push(`${f.name} has no data rows.`); continue }
     loaded.push({ name: f.name, csv, map: guessMapping(csv, f.name) })
   }
-  return { loaded, error: errors.join(' ') }
+  return { loaded, error: errors.join(' '), skipped: errors }
 }
 
-export function MappingStep({ files, onChange, onDone, onCancel }: { files: FileIn[]; onChange: (f: FileIn[]) => void; onDone: (r: Imported) => void; onCancel: () => void }) {
+export function MappingStep({ files, skipped, onChange, onDone, onCancel }: { files: FileIn[]; skipped: string[]; onChange: (f: FileIn[]) => void; onDone: (r: Imported) => void; onCancel: () => void }) {
   const [active, setActive] = useState(0)
   const [keep, setKeep] = useState(false)
   const f = files[Math.min(active, files.length - 1)]
   const { rows, report } = useMemo(() => {
     const report = emptyReport()
     const rows = files.flatMap((x) => buildRows(x.csv, x.map, x.name, report))
+    if (skipped.length) report.skipped = skipped
     return { rows, report }
-  }, [files])
+  }, [files, skipped])
   const snaps = useMemo(() => new Set(rows.flatMap((r) => (r.snapshot ? [r.snapshot] : []))).size, [rows])
   const items = useMemo(() => new Set(rows.flatMap((r) => (r.item ? [r.item] : []))).size, [rows])
   const set = (patch: Partial<Mapping>) => onChange(files.map((x) => (x === f ? { ...x, map: { ...x.map, ...patch } } : x)))
@@ -94,6 +96,12 @@ export function MappingStep({ files, onChange, onDone, onCancel }: { files: File
         </div>
         <button type="button" className="btn ghost" onClick={onCancel}>Back</button>
       </div>
+      {skipped.length > 0 && (
+        <div className="notice-inline skipped-files" role="status">
+          <b>{skipped.length === 1 ? '1 file was left out' : `${skipped.length} files were left out`}</b>, so the analysis does not include {skipped.length === 1 ? 'it' : 'them'}:
+          <ul className="reason-list">{skipped.map((m) => <li key={m}>{m}</li>)}</ul>
+        </div>
+      )}
       {files.length > 1 && (
         <div className="seg" role="tablist" aria-label="Files">
           {files.map((x, i) => <button type="button" role="tab" aria-selected={x === f} key={x.name + i} className={x === f ? 'on' : ''} onClick={() => setActive(i)}>{x.name}</button>)}

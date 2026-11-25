@@ -247,13 +247,17 @@ export interface CleanRow {
   actual: number | null
 }
 export interface BadRow { file: string; line: number; reason: string; raw: string }
-export interface ImportReport { total: number; kept: number; bad: BadRow[]; reasons: Record<string, number>; duplicates: number; parentRows: number; actualsRows: number }
+// skipped: files that were dropped but could not be read at all, each with the reason. Absent in reports saved earlier.
+export interface ImportReport { total: number; kept: number; bad: BadRow[]; reasons: Record<string, number>; duplicates: number; parentRows: number; actualsRows: number; skipped?: string[] }
 
 export function emptyReport(): ImportReport { return { total: 0, kept: 0, bad: [], reasons: {}, duplicates: 0, parentRows: 0, actualsRows: 0 } }
 
 const TOTAL_ITEM = /^(total|all|grand total|\*)$/i
 // "Sales forecast" is a forecast, so a forecast or plan word wins over sales or actual.
 const ACTUAL_MEASURE = /^(?!.*(forecast|fcst|plan|projection)).*(actual|sales|shipment|history)/i
+
+const SHORT_ROW = 'Row has fewer columns than the header (missing periods left blank, file may be cut off)'
+const BAD_CELLS = 'Some period cells unreadable (rest of row kept)'
 
 export function buildRows(csv: ParsedCsv, map: Mapping, file: string, report: ImportReport): CleanRow[] {
   const out: CleanRow[] = []
@@ -323,7 +327,14 @@ export function buildRows(csv: ParsedCsv, map: Mapping, file: string, report: Im
         : { snapshot, item, family, region, customer, period: day, qty: n, actual: null })
     }
     if (!cells) return bad(i, badCells ? 'No readable quantity in any period column' : 'Row has no quantities')
-    if (badCells) { const reason = 'Some period cells unreadable (rest of row kept)'; report.reasons[reason] = (report.reasons[reason] ?? 0) + 1; if (report.bad.length < 5000) report.bad.push({ file, line: csv.lineOf[i], reason, raw: csv.rows[i].join(' | ').slice(0, 200) }) }
+    // A row that stops before the last period column is either a truncated file or an export that drops trailing
+    // empty cells. Both keep their values and leave the missing periods blank (never zero), but the row is reported
+    // because the file may be cut off. A blank cell inside a complete row is a normal shorter horizon and is not.
+    const short = periodHeaders.some(({ c, day }) => day && c >= r.length)
+    const reasons = [...(short ? [SHORT_ROW] : []), ...(badCells ? [BAD_CELLS] : [])]
+    for (const reason of reasons) report.reasons[reason] = (report.reasons[reason] ?? 0) + 1
+    // One entry per row, so "rows with problems" never counts a row twice.
+    if (reasons.length && report.bad.length < 5000) report.bad.push({ file, line: csv.lineOf[i], reason: reasons.join('; '), raw: csv.rows[i].join(' | ').slice(0, 200) })
     if (item === '') report.parentRows++
     if (isActualMeasure) report.actualsRows++
     report.kept++

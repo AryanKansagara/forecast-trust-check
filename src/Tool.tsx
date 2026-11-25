@@ -46,6 +46,7 @@ export default function Tool() {
   const [sel, setSel] = useState<string | null>(null)
   const [mapping, setMapping] = useState<FileIn[] | null>(null)
   const [err, setErr] = useState('')
+  const [skipped, setSkipped] = useState<string[]>([])
   const [notice, setNotice] = useState('')
 
   // A shared link restores the view and, for samples, the dataset. It never holds uploaded data.
@@ -76,12 +77,13 @@ export default function Tool() {
 
   const onFiles = async (files: File[]) => {
     if (!files.length) return
-    const { loaded, error } = await readFiles(files)
+    const { loaded, error, skipped } = await readFiles(files)
     setErr(error)
+    setSkipped(skipped)
     if (loaded.length) setMapping(loaded)
   }
   const onImported = (r: Imported) => {
-    setMapping(null); setSel(null); setErr(''); setTab('waterfall')
+    setMapping(null); setSkipped([]); setSel(null); setErr(''); setTab('waterfall')
     buildDataset(r.rows, r.report) // fills in the duplicate count for the import report
     setSource({ kind: 'upload', name: r.name, rows: r.rows, report: r.report })
     history.replaceState({}, '', '/app')
@@ -93,7 +95,7 @@ export default function Tool() {
   }
   const forget = () => {
     localStorage.removeItem(DATA_KEY)
-    setSource(null); setSel(null); setMapping(null)
+    setSource(null); setSel(null); setMapping(null); setSkipped([])
     history.replaceState({}, '', '/app')
   }
   const openSample = (id: string) => { setSource({ kind: 'sample', id }); setSel(null); setMapping(null); history.replaceState({}, '', `/app?sample=${id}`) }
@@ -122,7 +124,7 @@ export default function Tool() {
         <div className="privacy-strip" role="note"><Lock /> <b>Your data stays in this browser.</b> <span>No uploads, no analytics. The page's security policy blocks outbound requests.</span></div>
         {notice && <p className="notice" role="status">{notice} <button type="button" className="link" onClick={() => setNotice('')}>Dismiss</button></p>}
         {mapping
-          ? <main className="wrap-wide"><MappingStep files={mapping} onChange={setMapping} onDone={onImported} onCancel={() => setMapping(null)} /></main>
+          ? <main className="wrap-wide"><MappingStep files={mapping} skipped={skipped} onChange={setMapping} onDone={onImported} onCancel={() => { setMapping(null); setSkipped([]) }} /></main>
           : !source
             ? <Start onFiles={onFiles} err={err} onSample={openSample} />
             : ds && an
@@ -487,9 +489,10 @@ function ReportView({ source, ds }: { source: NonNullable<Source>; ds: Dataset }
         <div className={r.bad.length ? 'warn' : ''}><b>{r.bad.length.toLocaleString('en-US')}</b><span>rows with problems</span></div>
         <div><b>{r.parentRows.toLocaleString('en-US')}</b><span>stated parent rows</span></div>
       </div>
+      {r.skipped && r.skipped.length > 0 && <div className="notice-inline skipped-files" role="status"><b>{r.skipped.length === 1 ? '1 file was left out' : `${r.skipped.length} files were left out`}</b> of this analysis:<ul className="reason-list">{r.skipped.map((m) => <li key={m}>{m}</li>)}</ul></div>}
       {r.duplicates > 0 && <p className="notice-inline">{r.duplicates.toLocaleString('en-US')} rows repeated the same snapshot, item and period and were added together. That usually means the file has a dimension that is not mapped.</p>}
       {r.bad.length === 0
-        ? <p className="empty-inline">Every row was read cleanly.</p>
+        ? <p className="empty-inline">{r.skipped?.length ? 'Every row in the files that were used was read cleanly.' : 'Every row was read cleanly.'}</p>
         : <>
             <ul className="reason-list">{Object.entries(r.reasons).sort((x, y) => y[1] - x[1]).map(([k, n]) => <li key={k}><b>{n.toLocaleString('en-US')}</b> {k}</li>)}</ul>
             <div className="table-scroll"><table className="data"><thead><tr><th>File</th><th className="num">Line</th><th>Problem</th><th>Row</th></tr></thead><tbody>{r.bad.slice(0, 100).map((b, i) => <tr key={i}><td>{b.file}</td><td className="num">{b.line}</td><td>{b.reason}</td><td className="mono-cell">{b.raw}</td></tr>)}</tbody></table></div>
