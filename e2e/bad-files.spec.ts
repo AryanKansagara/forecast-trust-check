@@ -131,12 +131,24 @@ test.describe('files that are wrong, empty or cut short', () => {
     await expect(stat(page, 'rows with problems')).toHaveText('1')
   })
 
-  // KNOWN BUG, issue #3: a wide row that ends early is read as complete. test.fail() turns red once it is reported.
-  test('a wide file cut off mid-row reports the short row', async ({ page }) => {
-    test.fail(true, 'Issue #3: wide rows shorter than the header are accepted silently')
+  test('a wide file cut off mid-row reports the short row and keeps what it holds', async ({ page }) => {
     const text = wideCsv().trimEnd()
     await importCsv(page, csvFile('wide.csv', text.slice(0, text.lastIndexOf(',199'))))   // last row stops after V2's first quantity
-    await expect(stat(page, 'rows with problems')).not.toHaveText('0', { timeout: 1500 })
+    await expect(stat(page, 'rows read')).toHaveText('6')
+    await expect(stat(page, 'rows with problems')).toHaveText('1')
+    await expect(page.locator('.reason-list')).toContainText('Row has fewer columns than the header')
+    await runCheck(page)
+    await openTab(page, /Import report/)
+    await expect(stat(page, 'rows with problems')).toHaveText('1')
+    await expect(page.getByText('Every row was read cleanly.')).toHaveCount(0)
+    await expect(page.getByRole('cell', { name: 'Row has fewer columns than the header (missing periods left blank, file may be cut off)' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: '2026-03-02 | Valves | V2 | 189' })).toBeVisible()
+  })
+
+  test('a wide file with complete rows and blank cells inside them is not reported', async ({ page }) => {
+    await importCsv(page, csvFile('wide.csv', wideCsv().replace('V1,100,100,100', 'V1,100,,100').replace('V2,189,199,209', 'V2,189,199,')))
+    await expect(stat(page, 'rows read')).toHaveText('6')
+    await expect(stat(page, 'rows with problems')).toHaveText('0')
   })
 
   test('a file cut off inside a quoted field reports the swallowed row', async ({ page }) => {

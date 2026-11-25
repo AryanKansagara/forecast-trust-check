@@ -75,6 +75,40 @@ test('import: wide format detected, snapshot taken from the filename, actuals vi
   assert.equal(report.reasons['Some period cells unreadable (rest of row kept)'], 1)
 })
 
+test('import: a wide row that ends before the last period is kept, left blank rather than zero, and reported', () => {
+  const SHORT = 'Row has fewer columns than the header (missing periods left blank, file may be cut off)'
+  const text = 'snapshot_date,family,item,2026-W10,2026-W11,2026-W12\n2026-02-16,V,A,1,2,3\n2026-02-23,V,A,4,,6\n2026-03-02,V,A,7,8,\n2026-03-09,V,A,9\n2026-03-16,V,A,10,11\n'
+  const csv = parseCsv(text)
+  const report = emptyReport()
+  const rows = buildRows(csv, guessMapping(csv), 'f.csv', report)
+  // Only the two rows that stop early are reported. A blank cell inside a complete row, or a trailing comma, is not.
+  assert.equal(report.reasons[SHORT], 2)
+  assert.deepEqual(report.bad.map((b) => b.line), [5, 6])
+  assert.equal(report.kept, 5)
+  const at = (snap: string) => rows.filter((r) => r.snapshot === snap).map((r) => [r.period, r.qty])
+  assert.deepEqual(at('2026-03-09'), [['2026-03-02', 9]])
+  assert.deepEqual(at('2026-03-16'), [['2026-03-02', 10], ['2026-03-09', 11]])
+  assert.equal(rows.filter((r) => r.qty === 0).length, 0)
+  // Rows read exactly as before: only the report differs.
+  assert.equal(rows.length, 3 + 2 + 2 + 1 + 2)
+})
+
+test('import: a wide row that ends early and also has an unreadable cell is one problem row with both reasons', () => {
+  const csv = parseCsv('snapshot_date,item,2026-W10,2026-W11,2026-W12\n2026-02-16,A,1,n/a\n2026-02-23,A,1,2,3\n')
+  const report = emptyReport()
+  buildRows(csv, guessMapping(csv), 'f.csv', report)
+  assert.equal(report.bad.length, 1)
+  assert.equal(Object.keys(report.reasons).length, 2)
+})
+
+test('import: a wide row with no quantities at all is still rejected, not merely reported short', () => {
+  const csv = parseCsv('snapshot_date,item,2026-W10,2026-W11,2026-W12\n2026-02-16,A\n2026-02-23,A,1,2,3\n')
+  const report = emptyReport()
+  const rows = buildRows(csv, guessMapping(csv), 'f.csv', report)
+  assert.equal(report.reasons['Row has no quantities'], 1)
+  assert.equal(rows.length, 3)
+})
+
 test('import: a TOTAL row is a stated parent, and a gap in its path is rejected', () => {
   const csv = parseCsv('snapshot,family,region,item,period,qty\n2026-01-05,F,R,TOTAL,2026-02,10\n2026-01-05,,R,,2026-02,10\n')
   const report = emptyReport()
